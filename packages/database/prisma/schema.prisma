@@ -1,0 +1,873 @@
+// ============================================================
+// Career Transparency Platform - Prisma Schema
+// ============================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("DATABASE_SHADOW_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  GUEST
+  USER
+  VERIFIED_USER
+  RECRUITER
+  COMPANY_ADMIN
+  MODERATOR
+  SUPER_ADMIN
+}
+
+enum TrustLevel {
+  LEVEL_0_UNVERIFIED
+  LEVEL_1_PHONE_VERIFIED
+  LEVEL_2_IDENTITY_VERIFIED
+  LEVEL_3_EMPLOYMENT_VERIFIED
+  LEVEL_4_INTERVIEW_VERIFIED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  FREELANCE
+  INTERNSHIP
+  REMOTE
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SCREENING
+  INTERVIEW
+  OFFER
+  REJECTED
+  HIRED
+}
+
+enum InterviewResult {
+  ACCEPTED
+  REJECTED
+  PENDING
+  WITHDREW
+}
+
+enum InterviewDifficulty {
+  VERY_EASY
+  EASY
+  MEDIUM
+  HARD
+  VERY_HARD
+}
+
+enum CompanySize {
+  STARTUP_1_10
+  SMALL_11_50
+  MEDIUM_51_200
+  LARGE_201_1000
+  ENTERPRISE_1000_PLUS
+}
+
+enum ContentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+  REMOVED
+}
+
+enum PlanType {
+  FREE
+  PREMIUM
+  PRO
+  ENTERPRISE
+}
+
+enum NotificationType {
+  APPLICATION_UPDATE
+  NEW_MESSAGE
+  REVIEW_APPROVED
+  SALARY_REPORT_APPROVED
+  COMMUNITY_REPLY
+  SYSTEM
+}
+
+// ============================================================
+// USER & AUTHENTICATION
+// ============================================================
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  emailVerifiedAt   DateTime?
+  phone             String?    @unique
+  phoneVerifiedAt   DateTime?
+  passwordHash      String
+  role              UserRole   @default(USER)
+  trustLevel        TrustLevel @default(LEVEL_0_UNVERIFIED)
+  trustScore        Int        @default(0) // 0-100
+  isActive          Boolean    @default(true)
+  isBanned          Boolean    @default(false)
+  banReason         String?
+  lastLoginAt       DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relations
+  profile           Profile?
+  sessions          Session[]
+  oauthAccounts     OAuthAccount[]
+  verifications     Verification[]
+  notifications     Notification[]
+  plan              UserPlan?
+  applications      Application[]
+
+  // Anonymous token (cryptographically separated from identity)
+  anonymousTokenHash String?   @unique // hashed, never stored in plain
+
+  @@index([email])
+  @@index([phone])
+  @@index([trustLevel])
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+model OAuthAccount {
+  id           String   @id @default(cuid())
+  userId       String
+  provider     String   // google, linkedin
+  providerAccountId String
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+model Verification {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // phone_otp, email_otp, identity, employment
+  code        String?
+  token       String?  @unique
+  metadata    Json?    // extra data for identity/employment verification
+  verifiedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("verifications")
+}
+
+// ============================================================
+// PROFILE & RESUME
+// ============================================================
+
+model Profile {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  firstName       String
+  lastName        String
+  headline        String?
+  bio             String?
+  avatarUrl       String?
+  coverUrl        String?
+  city            String?
+  country         String    @default("IR")
+  website         String?
+  linkedinUrl     String?
+  githubUrl       String?
+  isPublic        Boolean   @default(true)
+  publicSlug      String?   @unique
+  resumeScore     Int       @default(0) // completeness 0-100
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workExperiences WorkExperience[]
+  educations      Education[]
+  skills          ProfileSkill[]
+  certifications  Certification[]
+  projects        Project[]
+  languages       ProfileLanguage[]
+
+  @@index([publicSlug])
+  @@map("profiles")
+}
+
+model WorkExperience {
+  id           String    @id @default(cuid())
+  profileId    String
+  companyId    String?
+  companyName  String    // denormalized for flexibility
+  title        String
+  department   String?
+  employmentType EmploymentType @default(FULL_TIME)
+  city         String?
+  startDate    DateTime
+  endDate      DateTime?
+  isCurrent    Boolean   @default(false)
+  description  String?
+  isVerified   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company      Company?  @relation(fields: [companyId], references: [id])
+
+  @@index([profileId])
+  @@index([companyId])
+  @@map("work_experiences")
+}
+
+model Education {
+  id           String    @id @default(cuid())
+  profileId    String
+  institution  String
+  degree       String?
+  fieldOfStudy String?
+  startDate    DateTime
+  endDate      DateTime?
+  isCurrent    Boolean   @default(false)
+  grade        String?
+  description  String?
+  createdAt    DateTime  @default(now())
+
+  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("educations")
+}
+
+model Skill {
+  id           String         @id @default(cuid())
+  name         String         @unique
+  slug         String         @unique
+  category     String?
+  createdAt    DateTime       @default(now())
+
+  profileSkills ProfileSkill[]
+  jobSkills     JobSkill[]
+
+  @@index([slug])
+  @@map("skills")
+}
+
+model ProfileSkill {
+  id          String   @id @default(cuid())
+  profileId   String
+  skillId     String
+  level       Int?     // 1-5
+  yearsExp    Int?
+  isEndorsed  Boolean  @default(false)
+  endorseCount Int     @default(0)
+
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skill       Skill    @relation(fields: [skillId], references: [id])
+
+  @@unique([profileId, skillId])
+  @@map("profile_skills")
+}
+
+model Certification {
+  id           String    @id @default(cuid())
+  profileId    String
+  name         String
+  issuer       String
+  issueDate    DateTime?
+  expiryDate   DateTime?
+  credentialId String?
+  credentialUrl String?
+  createdAt    DateTime  @default(now())
+
+  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("certifications")
+}
+
+model Project {
+  id           String    @id @default(cuid())
+  profileId    String
+  title        String
+  description  String?
+  url          String?
+  startDate    DateTime?
+  endDate      DateTime?
+  isCurrent    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("projects")
+}
+
+model ProfileLanguage {
+  id          String   @id @default(cuid())
+  profileId   String
+  language    String
+  proficiency String   // native, fluent, intermediate, basic
+
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, language])
+  @@map("profile_languages")
+}
+
+// ============================================================
+// COMPANY
+// ============================================================
+
+model Company {
+  id              String      @id @default(cuid())
+  name            String
+  slug            String      @unique
+  logoUrl         String?
+  coverUrl        String?
+  description     String?
+  industry        String?
+  city            String?
+  country         String      @default("IR")
+  website         String?
+  size            CompanySize?
+  foundedYear     Int?
+  isVerified      Boolean     @default(false)
+  isActive        Boolean     @default(true)
+  plan            PlanType    @default(FREE)
+
+  // Aggregate scores (updated via background job)
+  overallRating   Float?
+  salaryScore     Float?
+  managementScore Float?
+  growthScore     Float?
+  cultureScore    Float?
+  workLifeScore   Float?
+  reviewCount     Int         @default(0)
+  salaryCount     Int         @default(0)
+  interviewCount  Int         @default(0)
+
+  // AI generated
+  aiStrengths     String[]
+  aiComplaints    String[]
+  aiRiskScore     Float?
+  aiCultureSummary String?
+  aiLastUpdated   DateTime?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  admins          CompanyAdmin[]
+  jobs            Job[]
+  reviews         Review[]
+  salaryReports   SalaryReport[]
+  interviewExps   InterviewExperience[]
+  workExperiences WorkExperience[]
+  discussions     Discussion[]
+  layoffReports   LayoffReport[]
+  companyPlan     CompanyPlan?
+
+  @@index([slug])
+  @@index([industry])
+  @@index([city])
+  @@map("companies")
+}
+
+model CompanyAdmin {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  role      String   @default("admin") // admin, owner
+  createdAt DateTime @default(now())
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@map("company_admins")
+}
+
+// ============================================================
+// JOB BOARD
+// ============================================================
+
+model Job {
+  id              String            @id @default(cuid())
+  companyId       String
+  title           String
+  slug            String            @unique
+  description     String
+  requirements    String?
+  benefits        String?
+  city            String?
+  isRemote        Boolean           @default(false)
+  employmentType  EmploymentType    @default(FULL_TIME)
+  experienceMin   Int?              // years
+  experienceMax   Int?
+  salaryMin       Int?              // in Toman
+  salaryMax       Int?
+  salaryCurrency  String            @default("IRR")
+  isSalaryVisible Boolean          @default(false)
+  industry        String?
+  status          String            @default("ACTIVE") // ACTIVE, PAUSED, CLOSED, DRAFT
+  expiresAt       DateTime?
+  viewCount       Int               @default(0)
+  applyCount      Int               @default(0)
+  isHighlighted   Boolean           @default(false)
+  isFeatured      Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  skills          JobSkill[]
+  applications    Application[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([city])
+  @@index([employmentType])
+  @@map("jobs")
+}
+
+model JobSkill {
+  id       String @id @default(cuid())
+  jobId    String
+  skillId  String
+  isRequired Boolean @default(true)
+
+  job      Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  skill    Skill  @relation(fields: [skillId], references: [id])
+
+  @@unique([jobId, skillId])
+  @@map("job_skills")
+}
+
+model Application {
+  id            String            @id @default(cuid())
+  jobId         String
+  userId        String
+  coverLetter   String?
+  resumeUrl     String?
+  status        ApplicationStatus @default(APPLIED)
+  aiMatchScore  Float?            // AI ranking score
+  recruiterNote String?
+  appliedAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  job           Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pipelineStages PipelineStage[]
+
+  @@unique([jobId, userId])
+  @@index([jobId])
+  @@index([userId])
+  @@index([status])
+  @@map("applications")
+}
+
+model PipelineStage {
+  id            String      @id @default(cuid())
+  applicationId String
+  stage         ApplicationStatus
+  note          String?
+  changedAt     DateTime    @default(now())
+  changedBy     String?     // userId of recruiter
+
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("pipeline_stages")
+}
+
+// ============================================================
+// ANONYMOUS REVIEWS
+// Privacy: anonymousAuthorToken is a one-way hash.
+// The real userId is NEVER stored alongside review content.
+// ============================================================
+
+model Review {
+  id                  String        @id @default(cuid())
+  companyId           String
+  // PRIVACY: anonymousAuthorToken = HMAC(userId + salt) - cannot be reversed
+  anonymousAuthorToken String       // hashed token, NOT userId
+  position            String
+  department          String?
+  city                String?
+  employmentType      EmploymentType?
+  startYear           Int?
+  endYear             Int?
+  isCurrent           Boolean       @default(false)
+  salaryRange         String?       // e.g. "10M-15M"
+
+  // Ratings 1-5
+  ratingOverall       Float
+  ratingSalary        Float
+  ratingManagement    Float
+  ratingGrowth        Float
+  ratingCulture       Float
+  ratingBenefits      Float
+  ratingWorkLife      Float
+
+  // Content
+  pros                String?
+  cons                String?
+  advice              String?
+  fullReview          String?
+
+  // Quality & Moderation
+  qualityScore        Float         @default(0)
+  status              ContentStatus @default(PENDING)
+  moderationNote      String?
+  aiSpamScore         Float?
+  aiToxicityScore     Float?
+  isDuplicate         Boolean       @default(false)
+
+  isHelpful           Int           @default(0) // helpful votes
+  isNotHelpful        Int           @default(0)
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  company             Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  votes               ReviewVote[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([anonymousAuthorToken])
+  @@map("reviews")
+}
+
+model ReviewVote {
+  id        String   @id @default(cuid())
+  reviewId  String
+  userId    String
+  isHelpful Boolean
+  createdAt DateTime @default(now())
+
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, userId])
+  @@map("review_votes")
+}
+
+// ============================================================
+// INTERVIEW EXPERIENCES
+// ============================================================
+
+model InterviewExperience {
+  id                  String              @id @default(cuid())
+  companyId           String
+  anonymousAuthorToken String
+  position            String
+  department          String?
+  city                String?
+  interviewDate       DateTime?
+  difficulty          InterviewDifficulty @default(MEDIUM)
+  result              InterviewResult     @default(PENDING)
+  duration            String?             // e.g. "2 weeks"
+  stages              Json?               // array of stage objects
+  technicalQuestions  String[]
+  hrQuestions         String[]
+  tips                String?
+  overallExperience   String?
+  offerReceived       Boolean?
+  status              ContentStatus       @default(PENDING)
+  aiSpamScore         Float?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([status])
+  @@map("interview_experiences")
+}
+
+// ============================================================
+// SALARY INTELLIGENCE
+// ============================================================
+
+model SalaryReport {
+  id                  String         @id @default(cuid())
+  companyId           String?
+  anonymousAuthorToken String
+  position            String
+  department          String?
+  city                String?
+  industry            String?
+  employmentType      EmploymentType @default(FULL_TIME)
+  experienceYears     Int?
+  educationLevel      String?        // bachelor, master, phd
+  baseSalary          Int            // in Toman (monthly)
+  bonus               Int?
+  stockOptions        Int?
+  totalComp           Int?           // computed
+  currency            String         @default("IRR")
+  reportYear          Int
+  reportMonth         Int?
+  status              ContentStatus  @default(PENDING)
+  aiSpamScore         Float?
+  createdAt           DateTime       @default(now())
+
+  company             Company?       @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([position])
+  @@index([city])
+  @@index([industry])
+  @@index([status])
+  @@map("salary_reports")
+}
+
+// Aggregated salary data (updated by background job)
+model SalaryAggregate {
+  id              String   @id @default(cuid())
+  position        String
+  city            String?
+  industry        String?
+  companyId       String?
+  experienceLevel String?  // junior, mid, senior, lead
+  medianSalary    Int
+  avgSalary       Int
+  minSalary       Int
+  maxSalary       Int
+  p25Salary       Int
+  p75Salary       Int
+  sampleCount     Int
+  reportYear      Int
+  updatedAt       DateTime @updatedAt
+
+  @@unique([position, city, industry, companyId, experienceLevel, reportYear])
+  @@index([position])
+  @@index([city])
+  @@index([industry])
+  @@map("salary_aggregates")
+}
+
+// ============================================================
+// COMMUNITY (Anonymous Discussions)
+// ============================================================
+
+model Topic {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  slug        String       @unique
+  description String?
+  iconUrl     String?
+  postCount   Int          @default(0)
+  createdAt   DateTime     @default(now())
+
+  discussions Discussion[]
+
+  @@map("topics")
+}
+
+model Discussion {
+  id                  String        @id @default(cuid())
+  topicId             String?
+  companyId           String?
+  anonymousAuthorToken String
+  title               String
+  body                String
+  isAnonymous         Boolean       @default(true)
+  authorDisplayName   String?       // e.g. "Software Engineer at TechCo"
+  upvotes             Int           @default(0)
+  downvotes           Int           @default(0)
+  viewCount           Int           @default(0)
+  commentCount        Int           @default(0)
+  isPinned            Boolean       @default(false)
+  status              ContentStatus @default(APPROVED)
+  aiSpamScore         Float?
+  aiToxicityScore     Float?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  topic               Topic?        @relation(fields: [topicId], references: [id])
+  company             Company?      @relation(fields: [companyId], references: [id])
+  comments            Comment[]
+  votes               DiscussionVote[]
+
+  @@index([topicId])
+  @@index([companyId])
+  @@index([status])
+  @@map("discussions")
+}
+
+model Comment {
+  id                  String        @id @default(cuid())
+  discussionId        String
+  parentId            String?
+  anonymousAuthorToken String
+  body                String
+  isAnonymous         Boolean       @default(true)
+  upvotes             Int           @default(0)
+  downvotes           Int           @default(0)
+  status              ContentStatus @default(APPROVED)
+  aiSpamScore         Float?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  discussion          Discussion    @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  parent              Comment?      @relation("CommentReplies", fields: [parentId], references: [id])
+  replies             Comment[]     @relation("CommentReplies")
+
+  @@index([discussionId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+model DiscussionVote {
+  id           String     @id @default(cuid())
+  discussionId String
+  userId       String
+  value        Int        // 1 or -1
+  createdAt    DateTime   @default(now())
+
+  discussion   Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@unique([discussionId, userId])
+  @@map("discussion_votes")
+}
+
+// ============================================================
+// LAYOFF TRACKER
+// ============================================================
+
+model LayoffReport {
+  id                  String        @id @default(cuid())
+  companyId           String?
+  companyName         String        // denormalized
+  anonymousAuthorToken String
+  department          String?
+  city                String?
+  affectedCount       Int?          // approximate
+  layoffDate          DateTime?
+  reason              String?       // restructuring, financial, etc.
+  severanceOffered    Boolean?
+  description         String?
+  status              ContentStatus @default(PENDING)
+  createdAt           DateTime      @default(now())
+
+  company             Company?      @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([status])
+  @@map("layoff_reports")
+}
+
+// ============================================================
+// MONETIZATION & PLANS
+// ============================================================
+
+model UserPlan {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  plan        PlanType  @default(FREE)
+  startsAt    DateTime  @default(now())
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  paymentRef  String?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_plans")
+}
+
+model CompanyPlan {
+  id          String    @id @default(cuid())
+  companyId   String    @unique
+  plan        PlanType  @default(FREE)
+  startsAt    DateTime  @default(now())
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  paymentRef  String?
+  createdAt   DateTime  @default(now())
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("company_plans")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+// ============================================================
+// MODERATION LOG
+// ============================================================
+
+model ModerationLog {
+  id           String   @id @default(cuid())
+  moderatorId  String?  // null = AI moderation
+  contentType  String   // review, discussion, comment, salary_report
+  contentId    String
+  action       String   // approve, reject, flag, remove
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  @@index([contentType, contentId])
+  @@map("moderation_logs")
+}
+
+// ============================================================
+// AI SEARCH LOGS (for improving AI features)
+// ============================================================
+
+model SearchLog {
+  id        String   @id @default(cuid())
+  query     String
+  userId    String?
+  results   Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("search_logs")
+}
