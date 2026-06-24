@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  Career Transparency Platform Setup${NC}"
+echo -echo -e "${GREEN}  Karsignal.ir - Career Transparency Platform${NC}"
 echo -e "${GREEN}  Ubuntu 24.04 LTS${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
@@ -84,10 +84,7 @@ if [ -d "$APP_DIR" ]; then
     cd $APP_DIR
     git pull
 else
-    # TODO: Replace with your actual repo URL
-    echo -e "${YELLOW}Please enter your git repository URL:${NC}"
-    read -p "Git URL: " GIT_URL
-    git clone $GIT_URL $APP_DIR
+        git clone https://github.com/AGhilHz/karsignal.git $APP_DIR
     cd $APP_DIR
 fi
 
