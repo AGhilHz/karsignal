@@ -1,6 +1,14 @@
 import {
-  Controller, Get, Post, Body, Param, Query,
-  UseGuards, Request, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -31,6 +39,12 @@ export class ReviewsController {
     return this.reviewsService.create(req.user.id, dto);
   }
 
+  @Get('recent')
+  @ApiOperation({ summary: 'Get most recent approved reviews across all companies' })
+  async findRecent(@Query('limit') limit = 10) {
+    return this.reviewsService.findRecent(+limit);
+  }
+
   @Get('company/:companyId')
   @ApiOperation({ summary: 'Get approved reviews for a company' })
   async findByCompany(
@@ -53,11 +67,7 @@ export class ReviewsController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Vote review as helpful or not helpful' })
-  async vote(
-    @Param('id') id: string,
-    @Request() req: any,
-    @Body() dto: VoteDto,
-  ) {
+  async vote(@Param('id') id: string, @Request() req: any, @Body() dto: VoteDto) {
     return this.reviewsService.voteHelpful(id, req.user.id, dto.isHelpful);
   }
 }

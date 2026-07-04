@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Briefcase, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { syncAccessTokenCookie } from '@/lib/auth-cookie';
+import { setAccessTokenCookie } from '@/lib/auth-cookie';
 
 const schema = z.object({
   email: z.string().email('ایمیل معتبر نیست'),
@@ -41,12 +41,16 @@ export default function LoginPage() {
     if (!hydrated) return;
     const token = localStorage.getItem('accessToken');
     if (isAuthenticated && token) {
-      syncAccessTokenCookie();
+      setAccessTokenCookie(token);
       window.location.href = getRedirectPath();
     }
   }, [hydrated, isAuthenticated]);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
@@ -92,15 +96,16 @@ export default function LoginPage() {
                   {...register('email')}
                   className={errors.email ? 'border-destructive' : ''}
                 />
-                {errors.email && (
-                  <p className="text-xs text-destructive">{errors.email.message}</p>
-                )}
+                {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">رمز عبور</Label>
-                  <Link href="/auth/forgot-password" className="text-xs text-primary hover:underline">
+                  <Link
+                    href="/auth/forgot-password"
+                    className="text-xs text-primary hover:underline"
+                  >
                     فراموشی رمز
                   </Link>
                 </div>

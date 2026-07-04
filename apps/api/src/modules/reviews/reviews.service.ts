@@ -79,6 +79,27 @@ export class ReviewsService {
     };
   }
 
+  async findRecent(limit = 10) {
+    return this.prisma.review.findMany({
+      where: { status: ContentStatus.APPROVED },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        position: true,
+        ratingOverall: true,
+        pros: true,
+        cons: true,
+        fullReview: true,
+        createdAt: true,
+        company: {
+          select: { name: true, slug: true },
+        },
+        // NEVER select anonymousAuthorToken in public responses
+      },
+    });
+  }
+
   async findByCompany(companyId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
 
@@ -176,9 +197,7 @@ export class ReviewsService {
       this.prisma.reviewVote.create({ data: { reviewId, userId, isHelpful } }),
       this.prisma.review.update({
         where: { id: reviewId },
-        data: isHelpful
-          ? { isHelpful: { increment: 1 } }
-          : { isNotHelpful: { increment: 1 } },
+        data: isHelpful ? { isHelpful: { increment: 1 } } : { isNotHelpful: { increment: 1 } },
       }),
     ]);
 

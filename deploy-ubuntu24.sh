@@ -17,7 +17,7 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 
 # ─── Check if running as root ─────────────────────────────
-if [ "$EUID" -ne 0 ]; then 
+if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}Please run as root: sudo bash deploy-ubuntu24.sh${NC}"
     exit 1
 fi
@@ -181,6 +181,11 @@ upstream web_frontend {
     keepalive 32;
 }
 
+upstream admin_frontend {
+    server admin:3002;
+    keepalive 32;
+}
+
 # Rate limiting zones
 limit_req_zone \$binary_remote_addr zone=api:10m rate=30r/s;
 limit_req_zone \$binary_remote_addr zone=auth:10m rate=5r/m;
@@ -318,7 +323,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
 
     location / {
-        proxy_pass http://web_frontend;
+        proxy_pass http://admin_frontend;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';

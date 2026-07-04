@@ -63,7 +63,8 @@ export const authApi = {
   sendPhoneOtp: (phone: string) => api.post('/auth/send-phone-otp', { phone }),
   verifyPhone: (phone: string, code: string) => api.post('/auth/verify-phone', { phone, code }),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
-  resetPassword: (token: string, newPassword: string) => api.post('/auth/reset-password', { token, newPassword }),
+  resetPassword: (token: string, newPassword: string) =>
+    api.post('/auth/reset-password', { token, newPassword }),
 };
 
 export const companiesApi = {
@@ -81,6 +82,7 @@ export const jobsApi = {
 };
 
 export const reviewsApi = {
+  getRecent: (params?: any) => api.get('/reviews/recent', { params }),
   getByCompany: (companyId: string, params?: any) =>
     api.get(`/reviews/company/${companyId}`, { params }),
   getSummary: (companyId: string) => api.get(`/reviews/company/${companyId}/summary`),

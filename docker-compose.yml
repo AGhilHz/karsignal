@@ -14,9 +14,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      - '5432:5432'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,9 +32,9 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - '6379:6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redispassword", "ping"]
+      test: ['CMD', 'redis-cli', '-a', 'redispassword', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -50,13 +50,17 @@ services:
       - discovery.type=single-node
       - ELASTIC_PASSWORD=elasticpassword
       - xpack.security.enabled=true
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
-      - "9200:9200"
+      - '9200:9200'
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -u elastic:elasticpassword http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      test:
+        [
+          'CMD-SHELL',
+          "curl -s -u elastic:elasticpassword http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -75,10 +79,10 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - '9000:9000'
+      - '9001:9001'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
       interval: 30s
       timeout: 20s
       retries: 3
@@ -103,7 +107,7 @@ services:
       - ./apps/api:/app
       - /app/node_modules
     ports:
-      - "3001:3001"
+      - '3001:3001'
     depends_on:
       postgres:
         condition: service_healthy
@@ -128,7 +132,29 @@ services:
       - /app/node_modules
       - /app/.next
     ports:
-      - "3000:3000"
+      - '3000:3000'
+    depends_on:
+      - api
+    networks:
+      - ctp_network
+
+  # ─── Next.js Admin ────────────────────────────────────────
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+      target: development
+    container_name: ctp_admin
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    volumes:
+      - ./apps/admin:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - '3002:3002'
     depends_on:
       - api
     networks:
@@ -143,11 +169,12 @@ services:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     depends_on:
       - api
       - web
+      - admin
     networks:
       - ctp_network
 
